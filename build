@@ -1,0 +1,62 @@
+#!/bin/bash
+kernel_version=${1}
+kernel_name="Smootly"
+device_name="s2"
+zip_name="$kernel_name-$device_name-$kernel_version.zip"
+
+export CONFIG_FILE="leeco_s2_defconfig"
+export ARCH="arm64"
+export CROSS_COMPILE="aarch64-linux-gnu-"
+export TOOL_CHAIN_PATH="${HOME}/kernel/aarch64-linux-gnu-6.x/bin"
+export CONFIG_ABS_PATH="arch/${ARCH}/configs/${CONFIG_FILE}"
+export PATH=$PATH:${TOOL_CHAIN_PATH}
+export objdir="${HOME}/kernel/leeco_s2/obj"
+export sourcedir="${HOME}/kernel/leeco_s2/kernel"
+export anykernel="${HOME}/kernel/leeco_s2/anykernel"
+compile() {
+  make O=$objdir ARCH=arm64 CROSS_COMPILE=${TOOL_CHAIN_PATH}/${CROSS_COMPILE}  $CONFIG_FILE -j8
+  make O=$objdir -j8
+}
+clean() {
+  make O=$objdir ARCH=arm64 CROSS_COMPILE=${TOOL_CHAIN_PATH}/${CROSS_COMPILE}  $CONFIG_FILE -j8
+  make O=$objdir mrproper
+}
+module_stock(){
+  rm -rf $anykernel/modules/
+  mkdir $anykernel/modules
+  find $objdir -name '*.ko' -exec cp -av {} $anykernel/modules/ \;
+  # strip modules
+ ${TOOL_CHAIN_PATH}/${CROSS_COMPILE}strip --strip-unneeded $anykernel/modules/*
+  cp -rf $objdir/arch/arm64/boot/Image.gz-dtb $anykernel/zImage
+}
+dtbuild(){
+  cd $sourcedir
+  ./tools/dtbToolCM -2 -o $objdir/arch/arm64/boot/dt.img -s 4096 -p $objdir/scripts/dtc/ $objdir/arch/arm64/boot/dts/
+}
+delete_previous(){
+  cd $anykernel
+  find . -name "*.zip" -type f
+  find . -name "*.zip" -type f -delete
+  find . -name "*.md5" -type f
+  find . -name "*.md5" -type f -delete
+}
+build_package(){
+  zip -r9 UPDATE-AnyKernel2.zip * -x README UPDATE-AnyKernel2.zip
+}
+make_name(){
+  mv UPDATE-AnyKernel2.zip $zip_name
+}
+make_md5(){
+  md5sum $zip_name > $zip_name.md5
+}
+turn_back(){
+cd $sourcedir
+}
+
+compile
+module_stock
+delete_previous
+build_package
+make_name
+make_md5
+turn_back
